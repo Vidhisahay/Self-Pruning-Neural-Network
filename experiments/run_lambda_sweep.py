@@ -1,26 +1,3 @@
-"""
-run_lambda_sweep.py
--------------------
-Trains the self-pruning network for three different lambda values
-and collects results into a comparison table.
-
-Lambda values tested: 1e-4 (low), 1e-3 (medium), 1e-2 (high)
-
-Expected behaviour:
-    - low  lambda → high accuracy, low sparsity  (gates barely pushed)
-    - mid  lambda → balanced tradeoff
-    - high lambda → low accuracy, high sparsity  (gates aggressively killed)
-
-Outputs:
-    outputs/results.csv                          ← comparison table
-    outputs/gate_dist_lambda_<val>.png           ← per-lambda gate plots
-    outputs/training_curves.png                  ← loss + sparsity over epochs
-
-Usage:
-    python experiments/run_lambda_sweep.py
-    python experiments/run_lambda_sweep.py --epochs 20 --quick
-"""
-
 import argparse
 import os
 import sys
@@ -38,7 +15,7 @@ from evaluate import full_eval, plot_gate_distribution
 # ------------------------------------------------------------------
 # Config
 # ------------------------------------------------------------------
-LAMBDAS    = [1e-4, 1e-3, 1e-2]
+LAMBDAS    = [0.1, 0.5, 1.0]
 EPOCHS     = 30
 LR         = 1e-3
 BATCH_SIZE = 128
