@@ -15,8 +15,8 @@ from evaluate import full_eval, plot_gate_distribution
 # ------------------------------------------------------------------
 # Config
 # ------------------------------------------------------------------
-LAMBDAS = [1.0, 5.0, 10.0]
-EPOCHS  = 15
+LAMBDAS    = [0.1, 1.0, 5.0]
+EPOCHS     = 30
 LR         = 1e-3
 BATCH_SIZE = 128
 OUT_DIR    = "outputs"

@@ -16,7 +16,7 @@ from loss  import total_loss
 # ------------------------------------------------------------------
 # Data loading
 # ------------------------------------------------------------------
-def get_dataloaders(batch_size: int = 128, num_workers: int = 2):
+def get_dataloaders(batch_size: int = 128, num_workers: int = 0):
     """
     Returns CIFAR-10 train and test DataLoaders.
 
@@ -60,7 +60,7 @@ def get_dataloaders(batch_size: int = 128, num_workers: int = 2):
 # ------------------------------------------------------------------
 # Single epoch helpers
 # ------------------------------------------------------------------
-def train_one_epoch(model, loader, optimizer, lambda_, device):
+def train_one_epoch(model, loader, optimizer_weights, optimizer_gates, lambda_, device):
     """
     Runs one full pass over the training set.
 
@@ -75,13 +75,15 @@ def train_one_epoch(model, loader, optimizer, lambda_, device):
     for images, labels in loader:
         images, labels = images.to(device), labels.to(device)
 
-        optimizer.zero_grad()
+        optimizer_weights.zero_grad()
+        optimizer_gates.zero_grad()
 
         logits = model(images)
         t_loss, c_loss, s_loss = total_loss(logits, labels, model, lambda_)
 
         t_loss.backward()
-        optimizer.step()
+        optimizer_weights.step()
+        optimizer_gates.step()
 
         # Hard pruning: gates that have fallen below 0.05 get pushed to -10.
         # sigmoid(-10) ≈ 0.00005 — decisively dead.
@@ -179,13 +181,31 @@ def train_model(
     # --- Data ---
     train_loader, test_loader = get_dataloaders(batch_size)
 
-    # --- Model + Optimiser ---
-    model     = SelfPruningNet(dropout_rate=dropout).to(device)
-    optimizer = optim.Adam(model.parameters(), lr=lr)
+    # --- Model ---
+    model = SelfPruningNet(dropout_rate=dropout).to(device)
 
-    # Cosine annealing: smoothly decays LR to near-zero over training.
-    # Helps gates settle cleanly at 0 or 1 by the end.
-    scheduler = optim.lr_scheduler.CosineAnnealingLR(optimizer, T_max=epochs)
+    # --- Two separate optimizers ---
+    # Problem: gate_scores get 17x weaker gradients than weights (confirmed by
+    # diagnose.py). With a single Adam optimizer, gates barely move because Adam
+    # normalizes gradients — even tiny gradients get a full lr=0.001 step, but
+    # in the SAME direction for all gates (no differentiation between important
+    # vs unimportant gates).
+    #
+    # Solution: give gates their own optimizer with 50x higher lr so they can
+    # move decisively. Weights keep lr=1e-3 for stable classification learning.
+
+    gate_params   = [layer.gate_scores for layer in model.prunable_layers()]
+    weight_params = [p for n, p in model.named_parameters()
+                     if not any(p is g for g in gate_params)]
+
+    optimizer_weights = optim.Adam(weight_params, lr=lr)
+    optimizer_gates   = optim.Adam(gate_params,   lr=lr * 50)  # 50x higher
+
+    # Cosine annealing on both
+    scheduler_weights = optim.lr_scheduler.CosineAnnealingLR(
+        optimizer_weights, T_max=epochs)
+    scheduler_gates   = optim.lr_scheduler.CosineAnnealingLR(
+        optimizer_gates, T_max=epochs)
 
     history = []
     best_acc = 0.0
@@ -195,13 +215,14 @@ def train_model(
 
         # --- Train ---
         avg_total, avg_cls, avg_sp, train_acc = train_one_epoch(
-            model, train_loader, optimizer, lambda_, device
+            model, train_loader, optimizer_weights, optimizer_gates, lambda_, device
         )
 
         # --- Evaluate ---
         test_acc, sparsity = evaluate(model, test_loader, device)
 
-        scheduler.step()
+        scheduler_weights.step()
+        scheduler_gates.step()
 
         # --- Log ---
         epoch_log = {
@@ -212,7 +233,7 @@ def train_model(
             "train_acc":  train_acc,
             "test_acc":   test_acc,
             "sparsity":   sparsity,
-            "lr":         scheduler.get_last_lr()[0],
+            "lr":         scheduler_weights.get_last_lr()[0],
         }
         history.append(epoch_log)
 
