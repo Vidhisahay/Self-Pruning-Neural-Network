@@ -1,27 +1,3 @@
-"""
-model.py
---------
-Defines the self-pruning network for CIFAR-10 classification.
-
-Architecture:
-    Feature Extractor (standard Conv layers)
-        → Conv(3, 32, 3) → BN → ReLU → MaxPool
-        → Conv(32, 64, 3) → BN → ReLU → MaxPool
-        → Conv(64, 128, 3) → BN → ReLU → AdaptiveAvgPool → Flatten
-        → output: (batch, 128)
-
-    Classifier (PrunableLinear layers — this is where pruning happens)
-        → PrunableLinear(128, 256) → ReLU → Dropout
-        → PrunableLinear(256, 128) → ReLU → Dropout
-        → PrunableLinear(128, 10)  → logits
-
-Design rationale:
-    - Conv layers are parameter-efficient for spatial features; pruning them
-      is more complex (structured vs unstructured). We keep them standard.
-    - FC layers are where most redundant capacity lives — ideal pruning targets.
-    - All three FC layers use PrunableLinear, maximising the prunable parameter count.
-"""
-
 import torch
 import torch.nn as nn
 from prunable_layer import PrunableLinear

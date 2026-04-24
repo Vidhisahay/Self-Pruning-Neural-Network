@@ -1,18 +1,3 @@
-"""
-prunable_layer.py
------------------
-Custom linear layer with learnable gates.
-
-Each weight w_ij has a corresponding gate score g_ij (also learnable).
-Forward pass computes:
-    gates      = sigmoid(gate_scores)          # squash to (0, 1)
-    pruned_W   = weight * gates                # element-wise kill weak weights
-    out        = pruned_W @ x.T + bias         # standard linear op
-
-The L1 sparsity loss (defined in loss.py) acts on gates, pushing them toward 0.
-When gate → 0, the weight is effectively dead — pruned.
-"""
-
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
@@ -45,7 +30,7 @@ class PrunableLinear(nn.Module):
         # Initialized to 0 → sigmoid(0) = 0.5, so all gates start half-open.
         # The sparsity loss will drive many of these toward -inf → sigmoid → 0.
         self.gate_scores = nn.Parameter(
-            torch.zeros(out_features, in_features)
+            torch.ones(out_features, in_features) * 2.0
         )
 
         # --- Optional bias (not gated — we only prune weights) ---

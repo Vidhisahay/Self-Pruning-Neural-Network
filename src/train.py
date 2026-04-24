@@ -1,23 +1,3 @@
-"""
-train.py
---------
-Training loop for the self-pruning network on CIFAR-10.
-
-Usage (standalone):
-    python train.py --lambda_ 1e-3 --epochs 30 --lr 1e-3
-
-Usage (from run_lambda_sweep.py):
-    from train import train_model
-    results = train_model(lambda_=1e-3, epochs=30)
-
-What happens each epoch:
-    1. Forward pass  → logits
-    2. total_loss()  → CrossEntropy + λ * Σ gates
-    3. Backward      → grads flow to weight AND gate_scores
-    4. Optimizer step → both weight and gates updated
-    5. Log cls_loss, sp_loss, train_acc, val_acc, sparsity
-"""
-
 import argparse
 import time
 import torch
@@ -102,6 +82,16 @@ def train_one_epoch(model, loader, optimizer, lambda_, device):
 
         t_loss.backward()
         optimizer.step()
+
+        # Hard pruning: gates that have fallen below 0.05 get pushed to -10.
+        # sigmoid(-10) ≈ 0.00005 — decisively dead.
+        # Without this, sigmoid asymptotically approaches 0 but never reaches
+        # the 1e-2 threshold, so sparsity stays at 0% forever.
+        with torch.no_grad():
+            for layer in model.prunable_layers():
+                gates = torch.sigmoid(layer.gate_scores)
+                dead  = gates < 0.05
+                layer.gate_scores.data[dead] = -10.0
 
         # Accumulate metrics
         batch = images.size(0)

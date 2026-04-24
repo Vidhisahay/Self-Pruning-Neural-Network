@@ -1,15 +1,3 @@
-"""
-evaluate.py
------------
-Post-training evaluation, sparsity reporting, and gate distribution plotting.
-
-What this module does:
-    1. compute_metrics()      — test accuracy + per-layer and global sparsity
-    2. print_sparsity_report()— human-readable breakdown of gate stats
-    3. plot_gate_distribution()— matplotlib histogram of all gate values
-    4. save_results_csv()     — appends one row per lambda run to results.csv
-"""
-
 import os
 import csv
 import torch

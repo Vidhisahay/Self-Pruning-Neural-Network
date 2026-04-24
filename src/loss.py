@@ -1,22 +1,3 @@
-"""
-loss.py
--------
-Sparsity regularisation loss for the self-pruning network.
-
-Total Loss = CrossEntropyLoss(logits, targets)
-           + lambda_ * SparsityLoss(model)
-
-SparsityLoss = sum of all gate values (sigmoid(gate_scores)) across
-               every PrunableLinear layer in the model.
-
-Why L1 on gates encourages sparsity:
-    - sigmoid(gate_scores) is always in (0, 1), so |gate| = gate.
-    - L1 norm = sum of gate values = sum of sigmoid(gate_scores).
-    - Gradient of sum(sigmoid(g)) w.r.t. g_ij = sigmoid(g_ij)*(1 - sigmoid(g_ij)).
-    - This pushes g_ij negative. As g_ij → -inf, sigmoid(g_ij) → 0 (gate dies).
-    - Unlike L2, the gradient doesn't vanish near zero — steady pressure until dead.
-"""
-
 import torch
 import torch.nn as nn
 from model import SelfPruningNet
