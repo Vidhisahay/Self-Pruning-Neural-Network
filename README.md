@@ -1,104 +1,82 @@
 # Self-Pruning Neural Network
 
 A neural network that learns to prune its own weights **during training** using
-learnable gate parameters and L1 sparsity regularisation, trained on CIFAR-10.
+learnable gate parameters and L1 sparsity regularization, trained on CIFAR-10.
 
 ---
 
-## Concept
+## Overview
 
-Each weight `w_ij` in a `PrunableLinear` layer has a corresponding learnable gate
-score `g_ij`. During the forward pass:
-
-```
-gates       = sigmoid(gate_scores)       # values in (0, 1)
-pruned_W    = weight * gates             # dead gates zero out weights
-output      = pruned_W @ x + bias
-```
-
-The training objective combines two terms:
-
-```
-Total Loss = CrossEntropy(logits, labels) + λ * Σ sigmoid(gate_scores)
-```
-
-The L1 penalty on gates creates constant gradient pressure pushing them toward zero.
-Gates whose weights don't help classification lose the tug-of-war and collapse —
-the weight is effectively pruned.
+This project implements a **self-pruning neural network**, where each weight is
+controlled by a learnable gate. During training, the model automatically removes
+unnecessary connections, resulting in a sparse and efficient network.
 
 ---
 
-## Project Structure
+## Core Idea
+
+Each weight `w_ij` has a corresponding gate score `g_ij`. During the forward pass:
 
 ```
-self-pruning-nn/
-├── src/
-│   ├── prunable_layer.py   # PrunableLinear — the gated weight layer
-│   ├── model.py            # SelfPruningNet — CNN + prunable FC head
-│   ├── loss.py             # Sparsity loss + total loss combiner
-│   ├── train.py            # Training loop and data loading
-│   └── evaluate.py         # Metrics, plots, CSV export
-│
-├── experiments/
-│   └── run_lambda_sweep.py # Full λ comparison run
-│
-├── outputs/                # Generated after training
-│   ├── results.csv
-│   ├── gate_dist_lambda_*.png
-│   └── training_curves.png
-│
-├── report/
-│   └── report.md           # Analysis and results writeup
-│
-└── requirements.txt
+gates    = sigmoid(g_ij)      # values in (0, 1)
+W_pruned = W * gates          # suppress inactive weights
+output   = W_pruned @ x + b
 ```
+
+Training objective:
+
+```
+Total Loss = CrossEntropy + λ * Σ sigmoid(g_ij)
+```
+
+* CrossEntropy → preserves accuracy
+* L1 sparsity term → pushes gates toward zero
+
+Weights with near-zero gates are effectively **pruned during training**.
 
 ---
 
-## Setup
+## How to Run
 
 ```bash
 pip install -r requirements.txt
+python self_pruning_nn.py
+```
+
+Optional arguments:
+
+```bash
+python self_pruning_nn.py --lambda_ 1.0 --epochs 30
 ```
 
 ---
 
-## Usage
+## Results
 
-### Single run
+| Lambda | Test Accuracy | Sparsity |
+| ------ | ------------- | -------- |
+| 0.1    | 77.01%        | 67.76%   |
+| 1.0    | 75.80%        | 92.61%   |
+| 5.0    | 73.57%        | 98.13%   |
 
-```bash
-# Train with one lambda value
-python src/train.py --lambda_ 1e-3 --epochs 30
+### Key Insight
 
-# Options:
-#   --lambda_     sparsity weight       (default: 1e-3)
-#   --epochs      number of epochs      (default: 30)
-#   --lr          Adam learning rate    (default: 1e-3)
-#   --batch_size  mini-batch size       (default: 128)
-#   --dropout     dropout rate in FC    (default: 0.3)
-```
-
-### Full lambda sweep (recommended)
-
-```bash
-# Trains for λ ∈ {1e-4, 1e-3, 1e-2}, generates all outputs and plots
-python experiments/run_lambda_sweep.py
-
-# Quick smoke-test (5 epochs each, ~2 min on CPU)
-python experiments/run_lambda_sweep.py --quick
-```
+* Increasing λ increases sparsity
+* Even at **98% sparsity**, the model retains strong performance
+* Indicates high redundancy in dense neural networks
 
 ---
 
-## Outputs
+## Gate Distribution
 
-| File                          | Description                            |
-|-------------------------------|----------------------------------------|
-| `outputs/results.csv`         | Lambda / Test Accuracy / Sparsity table|
-| `outputs/gate_dist_*.png`     | Gate value histogram per lambda        |
-| `outputs/training_curves.png` | Accuracy + sparsity over epochs        |
-| `report/report.md`            | Full written report                    |
+![Gate Distribution](report/gate_dist.png)
+
+The distribution is **bimodal**:
+
+* Spike near 0 → pruned weights
+* Cluster away from 0 → important weights
+
+This confirms successful self-pruning behavior.
 
 ---
 
@@ -107,26 +85,49 @@ python experiments/run_lambda_sweep.py --quick
 ```
 Input (3×32×32)
     ↓
-Conv(3→32) → BN → ReLU → MaxPool        # (B, 32, 16, 16)
-Conv(32→64) → BN → ReLU → MaxPool       # (B, 64, 8, 8)
-Conv(64→128) → BN → ReLU → AvgPool      # (B, 128, 1, 1)
-Flatten                                  # (B, 128)
+Conv → BN → ReLU → Pool
+Conv → BN → ReLU → Pool
+Conv → BN → ReLU → Pool
     ↓
-PrunableLinear(128→256) → ReLU → Dropout   ← prunable
-PrunableLinear(256→128) → ReLU → Dropout   ← prunable
-PrunableLinear(128→10)                     ← prunable
+Flatten
     ↓
-Logits (10 classes)
+PrunableLinear → ReLU → Dropout
+PrunableLinear → ReLU → Dropout
+PrunableLinear
+    ↓
+Output (10 classes)
 ```
-
-**Prunable parameters:** 66,816 gated weights across three FC layers.
 
 ---
 
-## Expected Results
+## Repository Structure
 
-| Lambda | Test Accuracy | Sparsity |
-|--------|:-------------:|:--------:|
-| 1e-4   | ~83–85%       | ~20–35%  |
-| 1e-3   | ~78–82%       | ~55–75%  |
-| 1e-2   | ~60–68%       | ~85–95%  |
+```
+self-pruning-nn/
+├── self_pruning_nn.py
+├── requirements.txt
+├── README.md
+└── report/
+    ├── report.md
+    └── gate_dist.png
+```
+
+---
+
+## Key Features
+
+* Learnable gating mechanism for weights
+* Differentiable pruning during training
+* L1-based sparsity regularization
+* Achieves up to **98% parameter sparsity**
+* No post-training pruning required
+
+---
+
+## Conclusion
+
+This project demonstrates that neural networks can **learn to prune themselves**
+during training using simple regularization techniques.
+
+It achieves significant model compression with minimal accuracy loss, making it
+a practical approach for efficient deep learning.
