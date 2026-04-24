@@ -23,26 +23,15 @@ from model import SelfPruningNet
 
 
 def sparsity_loss(model: SelfPruningNet) -> torch.Tensor:
-    """
-    Computes the L1 sparsity penalty: sum of all gate values.
-
-    Iterates over every PrunableLinear layer, applies sigmoid to its
-    gate_scores, and accumulates the sum. This keeps gradient flow
-    intact — no detach, no numpy.
-
-    Args:
-        model : the SelfPruningNet instance
-
-    Returns:
-        scalar tensor — the total sparsity penalty (differentiable)
-    """
     total = torch.tensor(0.0, device=next(model.parameters()).device)
+    count = 0
 
     for layer in model.prunable_layers():
-        gates = torch.sigmoid(layer.gate_scores)   # (out, in), values in (0,1)
-        total = total + gates.sum()                # L1 = sum (since gates >= 0)
+        gates = torch.sigmoid(layer.gate_scores)
+        total = total + gates.sum()
+        count += gates.numel()
 
-    return total
+    return total / count   # ← normalize: now always in (0, 1)
 
 
 def total_loss(
